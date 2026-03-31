@@ -5,8 +5,9 @@ Ephemeral one-to-one chat built with Next.js 16, Firebase Auth, Firestore, Fireb
 ## Credits
 
 Developed by B3nix.
+Developed by X - Gaming & Tech.
 
-Project / brand: X - Gaming & Tech.
+Project: CipherDrop
 
 ## Architecture
 
