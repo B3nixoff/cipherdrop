@@ -1,0 +1,10 @@
+/dist-desktop
+/electron
+/assets/icons
+/assets/linux
+/README.md
+/firebase
+/supabase
+/.firebaserc
+/firebase.json
+/apphosting.yaml

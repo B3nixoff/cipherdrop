@@ -1,0 +1,26 @@
+{
+  "rules": {
+    "presence": {
+      "$roomId": {
+        "$userId": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $userId"
+        }
+      }
+    },
+    "events": {
+      "$roomId": {
+        ".read": "auth != null",
+        "$eventId": {
+          ".write": "auth != null"
+        }
+      }
+    },
+    "usernames": {
+      "$usernameKey": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.child('userId').val() === auth.uid) || data.child('userId').val() === auth.uid)"
+      }
+    }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "name": "cipherdrop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CipherDrop desktop wrapper for ephemeral end-to-end encrypted chat.",
+  "homepage": "https://whyisthislifeismine.vercel.app",
+  "author": {
+    "name": "CipherDrop",
+    "email": "hello@cipherdrop.app"
+  },
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "desktop:dev": "ELECTRON_START_URL=http://localhost:3000 electron .",
+    "desktop:app": "electron .",
+    "desktop:dist": "electron-builder --win nsis portable",
+    "desktop:dist:linux": "electron-builder --linux AppImage pacman",
+    "desktop:dist:mac": "electron-builder --mac dmg zip",
+    "desktop:pack": "electron-builder --dir",
+    "firebase:rules": "pnpm dlx firebase-tools deploy --only firestore:rules,database",
+    "firebase:apphosting:init": "pnpm dlx firebase-tools init apphosting",
+    "firebase:apphosting:backends": "pnpm dlx firebase-tools apphosting:backends:list"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-scroll-area": "^1.2.9",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "firebase": "^12.11.0",
+    "lucide-react": "^0.554.0",
+    "next": "^16.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwind-merge": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "autoprefixer": "^10.4.21",
+    "electron": "41.1.0",
+    "electron-builder": "^26.8.1",
+    "eslint": "^9.36.0",
+    "eslint-config-next": "^16.0.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.2"
+  },
+  "build": {
+    "appId": "com.cipherdrop.desktop",
+    "productName": "CipherDrop",
+    "icon": "assets/icons/icon.png",
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "asar": true,
+    "win": {
+      "icon": "assets/icons/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "category": "Network",
+      "maintainer": "CipherDrop <hello@cipherdrop.app>",
+      "icon": "assets/icons",
+      "executableName": "cipherdrop",
+      "target": [
+        "AppImage",
+        "pacman"
+      ],
+      "artifactName": "CipherDrop-Linux-${version}-${arch}.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "CipherDrop-macOS-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "CipherDrop-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "CipherDrop-Portable-${version}.${ext}"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+.next
+node_modules
+.env.local
+pnpm-lock.yaml
+.vercel
+.codex
+dist-desktop
+packaging/repo/out
+tsconfig.tsbuildinfo

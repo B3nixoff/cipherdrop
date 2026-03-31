@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CipherDrop
+Comment=Ephemeral end-to-end encrypted chat
+Exec=/home/b3nix/Asztal/encryption/dist-desktop/CipherDrop-Linux-0.1.0-x86_64.AppImage
+Icon=/home/b3nix/.local/share/icons/hicolor/256x256/apps/cipherdrop.png
+Terminal=false
+Categories=Network;InstantMessaging;
+StartupNotify=true
+StartupWMClass=CipherDrop
