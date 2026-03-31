@@ -36,6 +36,7 @@ export function HomeShell() {
   const [username, setUsername] = useState("");
   const [currentUsername, setCurrentUsername] = useState("");
   const [inviteLink, setInviteLink] = useState("");
+  const [joinLink, setJoinLink] = useState("");
   const [status, setStatus] = useState("Preparing anonymous secure identity...");
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -159,6 +160,44 @@ export function HomeShell() {
     }
   }
 
+  function extractRoomIdFromLink(rawValue: string) {
+    const value = rawValue.trim();
+    if (!value) {
+      throw new Error("Paste an invite link first.");
+    }
+
+    const directMatch = value.match(/\/chat\/([^/?#]+)/);
+    if (directMatch?.[1]) {
+      return directMatch[1];
+    }
+
+    const protocolMatch = value.match(/^cipherdrop:\/\/chat\/([^/?#]+)/i);
+    if (protocolMatch?.[1]) {
+      return protocolMatch[1];
+    }
+
+    if (/^[A-Za-z0-9_-]{8,}$/.test(value)) {
+      return value;
+    }
+
+    throw new Error("That invite link is not valid.");
+  }
+
+  function handleJoinSession() {
+    setError(null);
+
+    try {
+      const roomId = extractRoomIdFromLink(joinLink);
+      router.push(`/chat/${roomId}`);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to open the invite link.",
+      );
+    }
+  }
+
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 lg:px-10">
       <div className="pointer-events-none absolute inset-0 grid-noise opacity-35" />
@@ -225,6 +264,30 @@ export function HomeShell() {
               <p className="font-mono text-xs leading-6 text-cyan-100/55">
                 Spawn a fresh room, then pass the direct link to exactly one second operator.
               </p>
+            </div>
+
+            <div className="hud-panel space-y-3 p-4 sm:p-5">
+              <label className="terminal-label block" htmlFor="join-link">
+                Paste Invite Link
+              </label>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Input
+                  id="join-link"
+                  autoComplete="off"
+                  value={joinLink}
+                  onChange={(event) => setJoinLink(event.target.value)}
+                  className="border-primary/20 bg-black/35 font-mono text-cyan-50 placeholder:text-cyan-100/30"
+                  placeholder="https://whyisthislifeismine.vercel.app/chat/ROOM_ID"
+                />
+                <Button
+                  variant="secondary"
+                  className="font-mono uppercase tracking-[0.14em]"
+                  onClick={handleJoinSession}
+                  disabled={!joinLink.trim()}
+                >
+                  Open link
+                </Button>
+              </div>
             </div>
 
             {inviteLink ? (
