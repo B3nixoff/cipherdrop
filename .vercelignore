@@ -1,4 +1,8 @@
 /dist-desktop
+/packaging/repo/out
+/node_modules
+/.next
+/.git
 /electron
 /assets/icons
 /assets/linux

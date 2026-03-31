@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   title: "CipherDrop",
   description:
     "Ephemeral end-to-end encrypted one-to-one chat built with Next.js, Firebase, and Web Crypto.",
+  icons: {
+    icon: "/icon.ico",
+    shortcut: "/icon.ico",
+  },
 };
 
 export default function RootLayout({
