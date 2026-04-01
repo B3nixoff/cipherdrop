@@ -38,13 +38,16 @@ export function HomeShell() {
       return false;
     }
 
+    const searchParams = new URLSearchParams(window.location.search);
+    const declaredClient = searchParams.get("client");
     const userAgent = navigator.userAgent ?? "";
     const isElectron = userAgent.includes("Electron");
     const isCapacitor = Boolean(
       (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor,
     );
+    const isWrappedApp = declaredClient === "desktop" || declaredClient === "android";
 
-    return !isElectron && !isCapacitor;
+    return !isElectron && !isCapacitor && !isWrappedApp;
   }, [isClient]);
   const [username, setUsername] = useState("");
   const [currentUsername, setCurrentUsername] = useState("");

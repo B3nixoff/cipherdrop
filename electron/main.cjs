@@ -3,11 +3,14 @@ const { app, BrowserWindow, Menu, shell } = require("electron");
 const DEFAULT_REMOTE_URL = "https://cipherdrop.eu";
 
 function resolveAppUrl() {
-  return (
+  const baseUrl =
     process.env.ELECTRON_START_URL ||
     process.env.DESKTOP_APP_URL ||
-    DEFAULT_REMOTE_URL
-  );
+    DEFAULT_REMOTE_URL;
+
+  const url = new URL(baseUrl);
+  url.searchParams.set("client", "desktop");
+  return url.toString();
 }
 
 function createMainWindow() {
