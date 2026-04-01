@@ -14,6 +14,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "mobile:sync": "pnpm exec cap sync android",
+    "mobile:copy": "pnpm exec cap copy android",
+    "mobile:open:android": "pnpm exec cap open android",
+    "mobile:run:android": "pnpm exec cap run android",
     "desktop:dev": "ELECTRON_START_URL=http://localhost:3000 electron .",
     "desktop:app": "electron .",
     "desktop:dist": "electron-builder --win nsis portable",
@@ -25,6 +29,8 @@
     "firebase:apphosting:backends": "pnpm dlx firebase-tools apphosting:backends:list"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-scroll-area": "^1.2.9",
     "@radix-ui/react-slot": "^1.2.3",
@@ -39,6 +45,7 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.3.0",
     "@types/node": "^24.6.0",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",

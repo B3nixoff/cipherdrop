@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CipherDrop</string>
+    <string name="title_activity_main">CipherDrop</string>
+    <string name="package_name">com.cipherdrop.mobile</string>
+    <string name="custom_url_scheme">com.cipherdrop.mobile</string>
+</resources>

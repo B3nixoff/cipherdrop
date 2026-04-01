@@ -43,6 +43,54 @@ export type RealtimeSessionEvent =
       roomId: string;
       senderId: string;
       sentAt: string;
+    }
+  | {
+      type: "call-invite";
+      roomId: string;
+      senderId: string;
+      sentAt: string;
+    }
+  | {
+      type: "call-accept";
+      roomId: string;
+      senderId: string;
+      sentAt: string;
+    }
+  | {
+      type: "call-reject";
+      roomId: string;
+      senderId: string;
+      sentAt: string;
+    }
+  | {
+      type: "call-end";
+      roomId: string;
+      senderId: string;
+      sentAt: string;
+      reason: "hangup" | "leave" | "burn";
+    }
+  | {
+      type: "webrtc-offer";
+      roomId: string;
+      senderId: string;
+      sentAt: string;
+      sdp: string;
+    }
+  | {
+      type: "webrtc-answer";
+      roomId: string;
+      senderId: string;
+      sentAt: string;
+      sdp: string;
+    }
+  | {
+      type: "webrtc-ice";
+      roomId: string;
+      senderId: string;
+      sentAt: string;
+      candidate: string;
+      sdpMid: string | null;
+      sdpMLineIndex: number | null;
     };
 
 export type RealtimeEvent = RealtimeEncryptedPayload | RealtimeSessionEvent;

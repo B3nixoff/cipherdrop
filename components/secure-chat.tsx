@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bug, Copy, Link2, LoaderCircle } from "lucide-react";
+import { AlertTriangle, Bug, Copy, Link2, LoaderCircle, Mic, MicOff, PhoneCall, PhoneIncoming, PhoneOff, Volume2 } from "lucide-react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { ChatComposer } from "@/components/chat-composer";
@@ -42,6 +42,14 @@ import type {
   SessionMessage,
 } from "@/lib/types";
 
+type CallState = "idle" | "outgoing" | "incoming" | "connecting" | "active";
+const rtcConfig: RTCConfiguration = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ],
+};
+
 type SecureChatProps = {
   roomId: string;
   currentUserId: string;
@@ -70,6 +78,9 @@ export function SecureChat({
   const sharedKeyRef = useRef<CryptoKey | null>(null);
   const participantSeenRef = useRef(false);
   const cleanupStartedRef = useRef(false);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [debugEnabled, setDebugEnabled] = useState(false);
@@ -82,6 +93,13 @@ export function SecureChat({
   const [sessionDescription, setSessionDescription] = useState(
     "The secure session is currently inactive.",
   );
+  const [callState, setCallState] = useState<CallState>("idle");
+  const [callStatus, setCallStatus] = useState("No active voice call.");
+  const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicrophoneId, setSelectedMicrophoneId] = useState("default");
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
+  const [selectedOutputId, setSelectedOutputId] = useState("default");
+  const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inviteLink = isClient ? `${window.location.origin}/chat/${roomId}` : "";
   const hasRemoteParticipant = Boolean(counterpart);
@@ -126,6 +144,191 @@ export function SecureChat({
     setSessionDescription(description);
   }
 
+  async function emitEvent(event: RealtimeEvent) {
+    if (!services) {
+      return;
+    }
+
+    await sendRoomEvent({
+      database: services.database,
+      roomId,
+      event,
+    });
+  }
+
+  function closeVoiceCall(shouldResetStatus = true) {
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+
+    setCallState("idle");
+    if (shouldResetStatus) {
+      setCallStatus("No active voice call.");
+    }
+  }
+
+  async function getLocalAudioStream() {
+    if (localStreamRef.current) {
+      return localStreamRef.current;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio:
+        selectedMicrophoneId && selectedMicrophoneId !== "default"
+          ? {
+              deviceId: {
+                exact: selectedMicrophoneId,
+              },
+            }
+          : true,
+      video: false,
+    });
+    localStreamRef.current = stream;
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !isMuted;
+    });
+    return stream;
+  }
+
+  async function refreshAudioDevices() {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices) {
+      return;
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices.filter(
+      (device): device is MediaDeviceInfo => device.kind === "audioinput",
+    );
+    const outputs = devices.filter(
+      (device): device is MediaDeviceInfo => device.kind === "audiooutput",
+    );
+
+    setMicrophones(audioInputs);
+    setAudioOutputs(outputs);
+    setSelectedMicrophoneId((current) => {
+      if (current !== "default" && audioInputs.some((device) => device.deviceId === current)) {
+        return current;
+      }
+
+      return audioInputs[0]?.deviceId ?? "default";
+    });
+    setSelectedOutputId((current) => {
+      if (current === "default") {
+        return "default";
+      }
+
+      if (outputs.some((device) => device.deviceId === current)) {
+        return current;
+      }
+
+      return "default";
+    });
+  }
+
+  async function replaceMicrophoneTrack(deviceId: string) {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+
+    const stream = await getLocalAudioStream();
+    const nextTrack = stream.getAudioTracks()[0];
+    if (!nextTrack) {
+      throw new Error("Selected microphone did not provide an audio track.");
+    }
+
+    const peerConnection = peerConnectionRef.current;
+    const audioSender = peerConnection
+      ?.getSenders()
+      .find((sender) => sender.track?.kind === "audio");
+
+    if (audioSender) {
+      await audioSender.replaceTrack(nextTrack);
+    } else if (peerConnection) {
+      peerConnection.addTrack(nextTrack, stream);
+    }
+
+    localStreamRef.current = stream;
+  }
+
+  function getOrCreatePeerConnection() {
+    if (peerConnectionRef.current) {
+      return peerConnectionRef.current;
+    }
+
+    const peerConnection = new RTCPeerConnection(rtcConfig);
+
+    peerConnection.onicecandidate = (event) => {
+      if (!event.candidate) {
+        return;
+      }
+
+      void emitEvent({
+        type: "webrtc-ice",
+        roomId,
+        senderId: currentUserId,
+        sentAt: new Date().toISOString(),
+        candidate: event.candidate.candidate,
+        sdpMid: event.candidate.sdpMid,
+        sdpMLineIndex: event.candidate.sdpMLineIndex,
+      });
+    };
+
+    peerConnection.ontrack = (event) => {
+      const [stream] = event.streams;
+      if (!stream || !remoteAudioRef.current) {
+        return;
+      }
+
+      remoteAudioRef.current.srcObject = stream;
+      void remoteAudioRef.current.play().catch(() => undefined);
+      setCallState("active");
+      setCallStatus("Voice call connected.");
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+      const state = peerConnection.connectionState;
+      if (state === "connected") {
+        setCallState("active");
+        setCallStatus("Voice call connected.");
+        return;
+      }
+
+      if (state === "connecting") {
+        setCallState("connecting");
+        setCallStatus("Negotiating secure audio link...");
+        return;
+      }
+
+      if (state === "failed" || state === "disconnected" || state === "closed") {
+        closeVoiceCall();
+      }
+    };
+
+    peerConnectionRef.current = peerConnection;
+    return peerConnection;
+  }
+
+  async function attachLocalAudio(peerConnection: RTCPeerConnection) {
+    const stream = await getLocalAudioStream();
+    const senders = peerConnection.getSenders();
+
+    for (const track of stream.getAudioTracks()) {
+      const alreadyAttached = senders.some((sender) => sender.track?.id === track.id);
+      if (!alreadyAttached) {
+        peerConnection.addTrack(track, stream);
+      }
+    }
+  }
+
   async function cleanupEphemeralIdentity() {
     if (!services || cleanupStartedRef.current) {
       return;
@@ -153,8 +356,79 @@ export function SecureChat({
   }
 
   const handlePageExitCleanup = useEffectEvent(() => {
+    closeVoiceCall(false);
     void cleanupEphemeralIdentity();
   });
+
+  const refreshMicrophoneTrack = useEffectEvent(async () => {
+    await replaceMicrophoneTrack(selectedMicrophoneId);
+  });
+
+  useEffect(() => {
+    if (!isClient || typeof navigator === "undefined" || !navigator.mediaDevices) {
+      return;
+    }
+
+    let active = true;
+
+    async function loadMicrophones() {
+      try {
+        if (!active) {
+          return;
+        }
+
+        await refreshAudioDevices();
+      } catch {
+        // Ignore device enumeration failures until the user starts a call.
+      }
+    }
+
+    void loadMicrophones();
+    navigator.mediaDevices.addEventListener?.("devicechange", loadMicrophones);
+
+    return () => {
+      active = false;
+      navigator.mediaDevices.removeEventListener?.("devicechange", loadMicrophones);
+    };
+  }, [isClient]);
+
+  useEffect(() => {
+    if (!localStreamRef.current) {
+      return;
+    }
+
+    localStreamRef.current.getAudioTracks().forEach((track) => {
+      track.enabled = !isMuted;
+    });
+  }, [isMuted]);
+
+  useEffect(() => {
+    if (!localStreamRef.current) {
+      return;
+    }
+
+    void refreshMicrophoneTrack().catch((caughtError) => {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Could not switch microphone.",
+      );
+    });
+  }, [selectedMicrophoneId]);
+
+  useEffect(() => {
+    const audioEl = remoteAudioRef.current as (HTMLAudioElement & {
+      setSinkId?: (sinkId: string) => Promise<void>;
+    }) | null;
+
+    if (!audioEl?.setSinkId) {
+      return;
+    }
+
+    void audioEl.setSinkId(selectedOutputId).catch(() => {
+      // Ignore unsupported sink changes for browsers without permissions.
+    });
+  }, [selectedOutputId]);
 
   useEffect(() => {
     if (!services) {
@@ -213,6 +487,101 @@ export function SecureChat({
       return;
     }
 
+    if (event.type === "call-invite") {
+      if (callState === "active" || callState === "connecting") {
+        return;
+      }
+
+      setCallState("incoming");
+      setCallStatus("Incoming encrypted voice call.");
+      return;
+    }
+
+    if (event.type === "call-accept") {
+      if (!services || callState !== "outgoing") {
+        return;
+      }
+
+      const peerConnection = getOrCreatePeerConnection();
+      await attachLocalAudio(peerConnection);
+      const offer = await peerConnection.createOffer({
+        offerToReceiveAudio: true,
+      });
+      await peerConnection.setLocalDescription(offer);
+      setCallState("connecting");
+      setCallStatus("Negotiating secure audio link...");
+      await emitEvent({
+        type: "webrtc-offer",
+        roomId,
+        senderId: currentUserId,
+        sentAt: new Date().toISOString(),
+        sdp: offer.sdp ?? "",
+      });
+      return;
+    }
+
+    if (event.type === "call-reject") {
+      closeVoiceCall();
+      setCallStatus("The other participant rejected the voice call.");
+      return;
+    }
+
+    if (event.type === "call-end") {
+      closeVoiceCall();
+      setCallStatus("The voice call ended.");
+      return;
+    }
+
+    if (event.type === "webrtc-offer") {
+      const peerConnection = getOrCreatePeerConnection();
+      await attachLocalAudio(peerConnection);
+      await peerConnection.setRemoteDescription({
+        type: "offer",
+        sdp: event.sdp,
+      });
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      setCallState("connecting");
+      setCallStatus("Negotiating secure audio link...");
+      await emitEvent({
+        type: "webrtc-answer",
+        roomId,
+        senderId: currentUserId,
+        sentAt: new Date().toISOString(),
+        sdp: answer.sdp ?? "",
+      });
+      return;
+    }
+
+    if (event.type === "webrtc-answer") {
+      const peerConnection = peerConnectionRef.current;
+      if (!peerConnection) {
+        return;
+      }
+
+      await peerConnection.setRemoteDescription({
+        type: "answer",
+        sdp: event.sdp,
+      });
+      setCallState("connecting");
+      setCallStatus("Negotiating secure audio link...");
+      return;
+    }
+
+    if (event.type === "webrtc-ice") {
+      const peerConnection = peerConnectionRef.current;
+      if (!peerConnection) {
+        return;
+      }
+
+      await peerConnection.addIceCandidate({
+        candidate: event.candidate,
+        sdpMid: event.sdpMid,
+        sdpMLineIndex: event.sdpMLineIndex,
+      });
+      return;
+    }
+
     if (event.type === "session-start") {
       setSessionEnded(false);
       setMessages((currentMessages) =>
@@ -224,6 +593,7 @@ export function SecureChat({
     }
 
     if (event.type === "session-burn") {
+      closeVoiceCall(false);
       clearSessionUi(
         "The other participant burned the session. Messages were wiped locally and never persisted to Firebase.",
       );
@@ -232,6 +602,7 @@ export function SecureChat({
       return;
     }
 
+    closeVoiceCall(false);
     clearSessionUi(
       event.reason === "leave"
         ? "The other participant left the room. A new join starts with an empty transcript."
@@ -324,6 +695,12 @@ export function SecureChat({
     );
   }, [currentUserId, roomId, services]);
 
+  useEffect(() => {
+    return () => {
+      closeVoiceCall(false);
+    };
+  }, []);
+
   async function sendMessage(plaintext: string) {
     return sendEncryptedContent({
       kind: "text",
@@ -398,6 +775,8 @@ export function SecureChat({
   }
 
   async function finishSession(reason: "leave" | "burn") {
+    closeVoiceCall(false);
+
     if (services) {
       await sendRoomEvent({
         database: services.database,
@@ -418,6 +797,18 @@ export function SecureChat({
                 reason: "leave",
               },
       });
+
+      await sendRoomEvent({
+        database: services.database,
+        roomId,
+        event: {
+          type: "call-end",
+          roomId,
+          senderId: currentUserId,
+          sentAt: new Date().toISOString(),
+          reason: reason === "burn" ? "burn" : "leave",
+        },
+      });
     }
 
     if (services) {
@@ -430,16 +821,115 @@ export function SecureChat({
     router.push("/");
   }
 
+  async function startVoiceCall() {
+    if (!counterpart || !services) {
+      return;
+    }
+
+    try {
+      setError(null);
+      setCallState("outgoing");
+      setCallStatus("Ringing remote participant...");
+      await emitEvent({
+        type: "call-invite",
+        roomId,
+        senderId: currentUserId,
+        sentAt: new Date().toISOString(),
+      });
+    } catch (caughtError) {
+      closeVoiceCall();
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Could not start voice call.",
+      );
+    }
+  }
+
+  async function acceptVoiceCall() {
+    if (!services) {
+      return;
+    }
+
+    try {
+      setError(null);
+      await getLocalAudioStream();
+      await refreshAudioDevices();
+      setCallState("connecting");
+      setCallStatus("Negotiating secure audio link...");
+      await emitEvent({
+        type: "call-accept",
+        roomId,
+        senderId: currentUserId,
+        sentAt: new Date().toISOString(),
+      });
+    } catch (caughtError) {
+      closeVoiceCall();
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Could not access microphone.",
+      );
+    }
+  }
+
+  async function rejectVoiceCall() {
+    closeVoiceCall();
+    await emitEvent({
+      type: "call-reject",
+      roomId,
+      senderId: currentUserId,
+      sentAt: new Date().toISOString(),
+    });
+  }
+
+  async function endVoiceCall() {
+    closeVoiceCall();
+    await emitEvent({
+      type: "call-end",
+      roomId,
+      senderId: currentUserId,
+      sentAt: new Date().toISOString(),
+      reason: "hangup",
+    });
+  }
+
+  async function handleMicrophoneChange(deviceId: string) {
+    setSelectedMicrophoneId(deviceId);
+
+    if (!localStreamRef.current && callState === "idle") {
+      return;
+    }
+
+    try {
+      await replaceMicrophoneTrack(deviceId);
+      await refreshAudioDevices();
+      if (callState === "active") {
+        setCallStatus("Microphone switched.");
+      }
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Could not switch microphone.",
+      );
+    }
+  }
+
   return (
     <div className="relative z-10 mx-auto flex min-h-[calc(100vh-2rem)] max-w-7xl flex-col gap-4 lg:gap-5">
+      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
       <SessionHeader
         roomId={roomId}
         username={myUsername}
         counterpartUsername={counterpart?.username ?? "Awaiting participant"}
         isRemoteOnline={isRemoteOnline}
         sessionEnded={sessionEnded}
+        callState={callState}
         onLeave={() => void finishSession("leave")}
         onBurn={() => void finishSession("burn")}
+        onStartCall={() => void startVoiceCall()}
+        onAcceptCall={() => void acceptVoiceCall()}
+        onRejectCall={() => void rejectVoiceCall()}
+        onEndCall={() => void endVoiceCall()}
       />
 
       <div className="grid flex-1 gap-4 lg:grid-cols-[1fr_300px]">
@@ -503,6 +993,86 @@ export function SecureChat({
               </div>
             </Card>
           ) : null}
+
+          <Card className="hud-panel p-5">
+            <p className="terminal-label">
+              Voice link
+            </p>
+            <div className="mt-4 space-y-3 font-mono text-sm leading-6 text-cyan-100/70">
+              <div className="flex items-center justify-between gap-4">
+                <span>Current state</span>
+                <Badge
+                  variant={
+                    callState === "active"
+                      ? "success"
+                      : callState === "incoming"
+                        ? "warning"
+                        : "secondary"
+                  }
+                >
+                  {callState}
+                </Badge>
+              </div>
+              <div className="rounded-[20px] border border-white/10 bg-black/20 px-3 py-2 text-xs text-cyan-100/55">
+                {callStatus}
+              </div>
+              <div className="space-y-2">
+                <label className="terminal-label block" htmlFor="microphone-select">
+                  microphone
+                </label>
+                <select
+                  id="microphone-select"
+                  value={selectedMicrophoneId}
+                  onChange={(event) => void handleMicrophoneChange(event.target.value)}
+                  className="h-11 w-full rounded-2xl border border-primary/20 bg-black/35 px-3 font-mono text-sm text-cyan-50 outline-none transition focus:border-primary/40"
+                >
+                  {microphones.length ? (
+                    microphones.map((device, index) => (
+                      <option key={device.deviceId || `${device.label}-${index}`} value={device.deviceId}>
+                        {device.label || `Microphone ${index + 1}`}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="default">Default microphone</option>
+                  )}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="terminal-label block" htmlFor="output-select">
+                  output
+                </label>
+                <select
+                  id="output-select"
+                  value={selectedOutputId}
+                  onChange={(event) => setSelectedOutputId(event.target.value)}
+                  className="h-11 w-full rounded-2xl border border-primary/20 bg-black/35 px-3 font-mono text-sm text-cyan-50 outline-none transition focus:border-primary/40"
+                >
+                  <option value="default">Default output</option>
+                  {audioOutputs.map((device, index) => (
+                    <option key={device.deviceId || `${device.label}-${index}`} value={device.deviceId}>
+                      {device.label || `Output ${index + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                variant={isMuted ? "destructive" : "secondary"}
+                className="w-full font-mono uppercase tracking-[0.14em]"
+                onClick={() => setIsMuted((current) => !current)}
+              >
+                {isMuted ? (
+                  <MicOff className="mr-2 h-4 w-4" />
+                ) : (
+                  <Mic className="mr-2 h-4 w-4" />
+                )}
+                {isMuted ? "Unmute microphone" : "Mute microphone"}
+              </Button>
+              <div className="flex items-center gap-2 text-xs text-cyan-100/45">
+                <Volume2 className="h-4 w-4" />
+                output switching depends on browser support for audio sink selection
+              </div>
+            </div>
+          </Card>
 
           <Card className="hud-panel p-5">
             <div className="flex items-center justify-between gap-3">
