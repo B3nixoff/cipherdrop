@@ -104,7 +104,7 @@ CipherDrop now includes a Capacitor Android wrapper that loads the hosted app.
 
 ### Android workflow
 
-1. Deploy the web app first with `pnpm dlx vercel --prod`.
+1. Deploy the web app first with `pnpm dlx vercel --prod` and ensure `https://cipherdrop.eu` points to the live site.
 2. Sync the hosted URL into the Android wrapper with `pnpm mobile:sync`.
 3. Open the native project in Android Studio with `pnpm mobile:open:android`.
 4. Build the APK or AAB from Android Studio.

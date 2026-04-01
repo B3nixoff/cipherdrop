@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "CipherDrop",
   webDir: ".next",
   server: {
-    url: "https://whyisthislifeismine.vercel.app",
+    url: "https://cipherdrop.eu",
     cleartext: false,
     androidScheme: "https",
   },

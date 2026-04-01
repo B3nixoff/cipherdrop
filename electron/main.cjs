@@ -1,6 +1,6 @@
 const { app, BrowserWindow, Menu, shell } = require("electron");
 
-const DEFAULT_REMOTE_URL = "https://whyisthislifeismine.vercel.app";
+const DEFAULT_REMOTE_URL = "https://cipherdrop.eu";
 
 function resolveAppUrl() {
   return (

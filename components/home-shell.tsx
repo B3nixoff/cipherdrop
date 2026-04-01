@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Copy, Link2, UserRoundPlus } from "lucide-react";
+import { Copy, Download, Link2, UserRoundPlus } from "lucide-react";
 import { startTransition, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,19 @@ export function HomeShell() {
     () => (isClient ? getFirebaseServices() : null),
     [isClient],
   );
+  const showDownloads = useMemo(() => {
+    if (!isClient || typeof window === "undefined" || typeof navigator === "undefined") {
+      return false;
+    }
+
+    const userAgent = navigator.userAgent ?? "";
+    const isElectron = userAgent.includes("Electron");
+    const isCapacitor = Boolean(
+      (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor,
+    );
+
+    return !isElectron && !isCapacitor;
+  }, [isClient]);
   const [username, setUsername] = useState("");
   const [currentUsername, setCurrentUsername] = useState("");
   const [inviteLink, setInviteLink] = useState("");
@@ -204,15 +217,25 @@ export function HomeShell() {
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-3xl items-center">
         <Card className="hud-panel grid-noise w-full overflow-hidden">
           <CardHeader>
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-xs uppercase tracking-[0.3em] text-primary shadow-[0_0_24px_rgba(0,255,179,0.12)]">
-              <Image
-                src="/logo.png"
-                alt="CipherDrop"
-                width={18}
-                height={18}
-                className="rounded-sm"
-              />
-              CipherDrop
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-xs uppercase tracking-[0.3em] text-primary shadow-[0_0_24px_rgba(0,255,179,0.12)]">
+                <Image
+                  src="/logo.png"
+                  alt="CipherDrop"
+                  width={18}
+                  height={18}
+                  className="rounded-sm"
+                />
+                CipherDrop
+              </div>
+              {showDownloads ? (
+                <Button asChild variant="outline" className="font-mono uppercase tracking-[0.14em]">
+                  <a href="/download">
+                    <Download className="mr-2 h-4 w-4" />
+                    Downloads
+                  </a>
+                </Button>
+              ) : null}
             </div>
             <CardTitle className="mt-3 font-mono text-3xl uppercase tracking-[0.18em] text-cyan-50 sm:text-4xl">
               Initialize Secure Session
@@ -277,7 +300,7 @@ export function HomeShell() {
                   value={joinLink}
                   onChange={(event) => setJoinLink(event.target.value)}
                   className="border-primary/20 bg-black/35 font-mono text-cyan-50 placeholder:text-cyan-100/30"
-                  placeholder="https://whyisthislifeismine.vercel.app/chat/ROOM_ID"
+                  placeholder="https://cipherdrop.eu/chat/ROOM_ID"
                 />
                 <Button
                   variant="secondary"

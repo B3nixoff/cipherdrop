@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "CipherDrop desktop wrapper for ephemeral end-to-end encrypted chat.",
-  "homepage": "https://whyisthislifeismine.vercel.app",
+  "homepage": "https://cipherdrop.eu",
   "author": {
     "name": "CipherDrop",
     "email": "hello@cipherdrop.app"
